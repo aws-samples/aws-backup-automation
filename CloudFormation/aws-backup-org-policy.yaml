@@ -1,0 +1,301 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This template deploys Backup Policies required to manage backups at an organization level. It should be deployed to the management account.
+
+Parameters:
+  pOrgbackupAccounts: 
+    Description: A CSV list of the AWS account id or AWS Organizations OU id to attach backup policies. 
+    Type: CommaDelimitedList
+    Default: ""  
+  pLambdaS3BucketName:
+    Description: The name of the S3 bucket hosting the custom Lambda code.
+    Type: String
+    Default: awsstorageblog
+  pCrossAccountBackupRole:
+    Description: This is the IAM role name for the cross-account backup role that carries out the backup activities.
+    Type: String
+    Default: 'service-role/AWSBackupDefaultServiceRole'    
+  pBackupScheduler:
+    Description: The CRON job to initiate backup jobs. For example, cron(0 0/1 ? * * *).
+    Type: String
+    Default: cron(0 0/1 ? * * *)
+  pMemberAccountBackupVault:
+    AllowedPattern: ^[a-zA-Z0-9\-\_\.]{1,50}$
+    ConstraintDescription: The name of the member account Backup vaults. (Name is case sensitive). 
+    Type: String
+  pBackupTagKey1:
+    Type: String 
+    Description: The backup tag key to automatically assign resources to a backup plan across the member accounts. 
+    Default: 'project'
+  pBackupTagValue1:
+    Type: String 
+    Description: The backup tag value to automatically assign resources to a backup plan across the member accounts. 
+    Default: 'aws-backup-demo'
+  pBackupTagKey2:
+    Type: String 
+    Description: The backup tag key to automatically assign resources to a backup plan across the member accounts. 
+    Default: 'environment'
+  pBackupTagValue2:
+    Type: String 
+    Description: The backup tag value to automatically assign resources to a backup plan across the member accounts. 
+    Default: 'aws-dev'
+  pTagKey:
+    Type: String 
+    Description: This is the tag key to assign to resources.
+    Default: 'project'
+  pTagValue:
+    Type: String 
+    Description: This is the tag value to assign to resources.
+    Default: 'aws-backup'
+
+Resources:
+  rOrgBackUpPolicy:
+    Type: Custom::OrgPolicy
+    Properties:
+      PolicyPrefix: org-backup-policy
+      PolicyType: BACKUP_POLICY
+      PolicyTargets : !Ref pOrgbackupAccounts
+      PolicyDescription: >-
+        BackupPolicy for Daily Backup as per the resource selection criteria
+      PolicyContents: |-
+            [
+              {
+                  "plans": {
+                      "OrgDailyBackupPlan-1": {
+                          "regions": {
+                            "@@append":[ "us-east-1", "eu-central-1", "us-east-2", "us-west-2", "eu-west-1", "ap-southeast-1", "ap-southeast-2", "ca-central-1", "eu-north-1" ] },
+                          "rules": {
+                              "OrgDailyBackupRule": {
+                                  "schedule_expression": {
+                                      "@@assign": "SCHEDULE_EXPRESSION"
+                                  },
+                                  "start_backup_window_minutes": {
+                                      "@@assign": "480"
+                                  },
+                                  "complete_backup_window_minutes": {
+                                      "@@assign": "720"
+                                  },
+                                  "lifecycle": {
+                                      "delete_after_days": {
+                                          "@@assign": "5"
+                                      }
+                                  },
+                                  "target_backup_vault_name": {
+                                      "@@assign": "VAULT_NAME"
+                                  },
+                                  "recovery_point_tags": {
+                                      "project": {
+                                          "tag_key": {
+                                              "@@assign": "TAG_KEY"
+                                          },
+                                          "tag_value": {
+                                              "@@assign": "TAG_VALUE"
+                                          }
+                                      }
+                                  },
+                                  "copy_actions": {
+                                    "<REPLACE-WITH-CENTRAL-BACKUP-VAULT-ARN>": {
+                                      "target_backup_vault_arn": {
+                                        "@@assign": "<REPLACE-WITH-CENTRAL-BACKUP-VAULT-ARN>"
+                                      },
+                                      "lifecycle": {
+                                        "move_to_cold_storage_after_days": {
+                                          "@@assign": "30"
+                                        },
+                                        "delete_after_days": {
+                                          "@@assign": "365"
+                                        }
+                                      }
+                                  }
+                              }
+                            }                            
+                          },
+                          "backup_plan_tags": {
+                              "project": {
+                                  "tag_key": {
+                                      "@@assign": "TAG_KEY"
+                                  },
+                                  "tag_value": {
+                                      "@@assign": "TAG_VALUE"
+                                  }
+                              }
+                          },
+                          "selections": {
+                              "tags": {
+                                  "OrgDailyBackupSelection": {
+                                      "iam_role_arn": {
+                                          "@@assign": "arn:aws:iam::$account:role/BACKUP_ROLE"
+                                      },
+                                      "tag_key": {
+                                          "@@assign": "TAG_KEY_1"
+                                      },
+                                      "tag_value": {
+                                          "@@assign": [
+                                              "TAG_VALUE_1"
+                                          ]
+                                      }
+                                  }
+                              }
+                          }
+                      }
+                  }
+              },
+              {
+                  "plans": {
+                      "OrgDailyBackupPlan-2": {
+                          "regions": {
+                            "@@append":[ "us-east-1", "eu-central-1", "us-east-2", "us-west-2", "eu-west-1", "ap-southeast-1", "ap-southeast-2", "ca-central-1", "eu-north-1" ] },
+                          "rules": {
+                              "OrgDailyBackupRule": {
+                                  "schedule_expression": {
+                                      "@@assign": "SCHEDULE_EXPRESSION"
+                                  },
+                                  "start_backup_window_minutes": {
+                                      "@@assign": "480"
+                                  },
+                                  "complete_backup_window_minutes": {
+                                      "@@assign": "720"
+                                  },
+                                  "lifecycle": {
+                                      "delete_after_days": {
+                                          "@@assign": "5"
+                                      }
+                                  },
+                                  "target_backup_vault_name": {
+                                      "@@assign": "VAULT_NAME"
+                                  },
+                                  "recovery_point_tags": {
+                                      "project": {
+                                          "tag_key": {
+                                              "@@assign": "TAG_KEY"
+                                          },
+                                          "tag_value": {
+                                              "@@assign": "TAG_VALUE"
+                                          }
+                                      }
+                                  },
+                                  "copy_actions": {
+                                    "<REPLACE-WITH-CENTRAL-BACKUP-VAULT-ARN>": {
+                                      "target_backup_vault_arn": {
+                                        "@@assign": "<REPLACE-WITH-CENTRAL-BACKUP-VAULT-ARN>"
+                                      },
+                                      "lifecycle": {
+                                        "move_to_cold_storage_after_days": {"@@assign": "30"},
+                                        "delete_after_days": {"@@assign": "365"} 
+                                      }
+                                  }
+                              }
+                            }                            
+                          },
+                          "backup_plan_tags": {
+                              "project": {
+                                  "tag_key": {
+                                      "@@assign": "TAG_KEY"
+                                  },
+                                  "tag_value": {
+                                      "@@assign": "TAG_VALUE"
+                                  }
+                              }
+                          },
+                          "selections": {
+                              "tags": {
+                                  "OrgDailyBackupSelection": {
+                                      "iam_role_arn": {
+                                          "@@assign": "arn:aws:iam::$account:role/BACKUP_ROLE"
+                                      },
+                                      "tag_key": {
+                                          "@@assign": "TAG_KEY_2"
+                                      },
+                                      "tag_value": {
+                                          "@@assign": [
+                                              "TAG_VALUE_2"
+                                          ]
+                                      }
+                                  }
+                              }
+                          }
+                      }
+                  }
+              }
+            ]
+      Variables:
+          - BACKUP_ROLE: !Ref "pCrossAccountBackupRole"
+          - VAULT_NAME: !Ref pMemberAccountBackupVault
+          - TAG_KEY_1 : !Ref "pBackupTagKey1"
+          - TAG_VALUE_1 : !Ref "pBackupTagValue1"
+          - TAG_KEY_2 : !Ref "pBackupTagKey2"
+          - TAG_VALUE_2 : !Ref "pBackupTagValue2"
+          - TAG_KEY : !Ref "pTagKey"
+          - TAG_VALUE : !Ref "pTagValue"
+          - SCHEDULE_EXPRESSION : !Ref "pBackupScheduler"
+      ServiceToken: !GetAtt OrgPolicyCustomResourceManager.Arn
+      
+  
+  OrgPolicyCustomResourceManager:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: OrgPolicyCustomResourceManager
+      Description: Lambda function to deploy CloudFormation custom resources
+                   to AWS Organizations.
+      Handler: OrgPolicyCustomResourceManager.lambda_handler
+      Code:
+        S3Bucket: !Ref pLambdaS3BucketName
+        S3Key: ioawssecbackupblog/OrgPolicyCustomResourceManager.zip
+      Role: !GetAtt OrgPolicyCustomResourceManagerRole.Arn
+      Runtime: python3.8
+      MemorySize: 256
+      Timeout: 300
+      Tags:
+        - Key: !Ref pTagKey
+          Value: !Ref pTagValue
+
+  OrgPolicyCustomResourceManagerRole:
+    Type: 'AWS::IAM::Role'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W11
+            reason: IAM role should not allow * resource on its permissions policy
+          - id: F3
+            reason: IAM role should not allow * resource on its permissions policy
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'lambda.amazonaws.com'
+          Action:
+          - 'sts:AssumeRole'
+      Path: '/'
+      ManagedPolicyArns:
+      - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+      - PolicyName: AssumeOrgRole
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+              - sts:AssumeRole
+            Resource: '*'
+      - PolicyName: OrgPermissions
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+              - organizations:CreatePolicy
+              - organizations:DeletePolicy
+              - organizations:AttachPolicy
+              - organizations:DetachPolicy
+              - organizations:ListPolicies
+              - organizations:UpdatePolicy
+              - organizations:DescribePolicy
+              - organizations:ListTargetsForPolicy              
+            Resource: '*'
+      - PolicyName: S3Permissions
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+              - s3:Get*
+            Resource: 
+              !Sub arn:aws:s3:::${pLambdaS3BucketName}/*
