@@ -13,7 +13,6 @@ Parameters:
   pCrossAccountBackupRole:
     Description: This is the IAM role name for the cross-account backup role that carries out the backup activities.
     Type: String
-    Default: 'service-role/AWSBackupDefaultServiceRole'    
   pBackupScheduler:
     Description: The CRON job to initiate backup jobs. For example, cron(0 0/1 ? * * *).
     Type: String
