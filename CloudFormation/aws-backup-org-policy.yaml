@@ -9,7 +9,7 @@ Parameters:
   pLambdaS3BucketName:
     Description: The name of the S3 bucket hosting the custom Lambda code.
     Type: String
-    Default: awsstorageblog
+    Default: awsstorageblogresources
   pCrossAccountBackupRole:
     Description: This is the IAM role name for the cross-account backup role that carries out the backup activities.
     Type: String
