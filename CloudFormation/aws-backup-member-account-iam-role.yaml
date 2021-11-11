@@ -1,0 +1,58 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  This template creates the Backup IAM role required for the automated centralized backup at scale in AWS Organizations using AWS Backup.
+  It should be deployed in each member account.
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: AWS Backup Configuration
+        Parameters:
+          - pCrossAccountBackupRole
+          - pTagKey1
+          - pTagValue1
+    ParameterLabels:
+      pCrossAccountBackupRole:
+        default: Enter an IAM Role Name
+      pTagKey1:
+        default: Enter a Tag Key
+      pTagValue1:
+        default: Enter a Tag Value
+Parameters:
+  pCrossAccountBackupRole:
+    Type: String
+    Description: This is the IAM role name for the cross-account backup role that carries out the backup activities.
+  pTagKey1:
+    Type: String
+    Description: This is the tag key to assign to resources.
+  pTagValue1:
+    Type: String
+    Description: This is the tag value to assign to resources.
+Resources:
+  rOrgAccountBackupRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Description: Allows AWS Backup to access AWS services
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - backup.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup
+        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForRestores
+      RoleName: !Sub ${pCrossAccountBackupRole}
+      Tags:
+        - Key: !Ref pTagKey1
+          Value: !Ref pTagValue1
+  
+Outputs:
+  oOrgAccountBackupRole:
+    Value: !Ref rOrgAccountBackupRole
+

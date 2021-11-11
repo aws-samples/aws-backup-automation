@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  This template creates the Backup KMS key, IAM role, and vault required for the blog post - Automate centralized backup at scale across AWS services using AWS Backup.
-  It should be deployed to each AWS Organizations member account.
+  This template creates the Backup KMS Key and Vault required for the automated centralized backup at scale in AWS Organizations using AWS Backup.
+  It should be deployed in each member account.
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -17,7 +17,7 @@ Metadata:
           - pTagValue1
     ParameterLabels:
       pCrossAccountBackupRole:
-        default: Enter an IAM Role Name 
+        default: Enter the name of the Backup IAM Role 
       pBackupKeyAlias:
         default: Name of the AWS Backup KMS key Alias
       pMemberBackupVaultName:
@@ -31,7 +31,7 @@ Metadata:
 Parameters:
   pCrossAccountBackupRole:
     Type: String
-    Description: This is the IAM role name for the cross-account backup role that carries out the backup activities.
+    Description: This is the name for the cross-account backup role that carries out the backup activities.
   pBackupKeyAlias:
     Type: String
     Description: This is the name of the AWS Backup KMS key alias.
@@ -56,27 +56,6 @@ Parameters:
     Type: String
     Description: This is the tag value to assign to resources.
 Resources:
-  rOrgAccountBackupRole:
-    Type: "AWS::IAM::Role"
-    Properties:
-      Description: Allows AWS Backup to access AWS services
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - backup.amazonaws.com
-            Action:
-              - "sts:AssumeRole"
-      Path: /
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup
-        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForRestores
-      RoleName: !Sub ${pCrossAccountBackupRole}
-      Tags:
-        - Key: !Ref pTagKey1
-          Value: !Ref pTagValue1
   rMemberAccountBackupKey:
     Type: AWS::KMS::Key
     Metadata:
@@ -102,7 +81,7 @@ Resources:
             Sid: Allow use of the key by authorized Backup principal
             Effect: "Allow"
             Principal:
-              AWS: !GetAtt rOrgAccountBackupRole.Arn
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:role/${pCrossAccountBackupRole}
             Action:
               - kms:DescribeKey
               - kms:Encrypt
@@ -113,8 +92,7 @@ Resources:
             Resource: "*"
             Condition:
               StringEquals:
-                "kms:CallerAccount": !Sub ${AWS::AccountId}
-                "kms:ViaService": !Sub "backup.${AWS::Region}.amazonaws.com"
+                "kms:ViaService": !Sub "backup.amazonaws.com"
           -
             Sid: Allow alias creation during setup
             Effect: "Allow"
@@ -156,6 +134,4 @@ Outputs:
     Value: !Ref rMemberAccountBackupVault
   oMemberAccountKMSKey:
     Value: !Ref rMemberAccountBackupKey
-  oOrgAccountBackupRole:
-    Value: !Ref rOrgAccountBackupRole
 

@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: This template creates the central backup KMS key and vault required for the blog post - Automate centralized backup at scale across AWS services using AWS Backup.
-  It should be deployed to the central backup account.
+Description: This template creates the central backup KMS Key and Vault required for the automated centralized backup at scale in AWS Organizations using AWS Backup.
+  It should be deployed in each member account.
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -12,8 +12,6 @@ Metadata:
           - pBackupKeyAlias
           - pCentralBackupVaultName
           - pOrganizationId
-          - pMemberOneAccountId
-          - pMemberTwoAccountId
           - pTagKey1
           - pTagValue1
     ParameterLabels:
@@ -25,10 +23,6 @@ Metadata:
         default: Backup vault name (Case sensitive)
       pOrganizationId:
         default: Organization ID
-      pMemberOneAccountId:
-        default: Member one account ID
-      pMemberTwoAccountId:
-        default: Member two account ID
       pTagKey1:
         default: Tag Key
       pTagValue1:
@@ -44,13 +38,7 @@ Parameters:
     Type: String
     Description: This is the name of the centralized account backup vault.
     AllowedPattern: ^[a-zA-Z0-9\-\_\.]{1,50}$
-    ConstraintDescription: Backup vault name is case sensitive
-  pMemberOneAccountId:
-    Type: String
-    Description: This is the account ID of the first member account.
-  pMemberTwoAccountId:
-    Type: String
-    Description: This is the account ID of the second member account.
+    ConstraintDescription: Backup vault name is case sensitive.
   pOrganizationId:
     Type: String
     Description: This is the AWS Organization ID value.
@@ -123,37 +111,6 @@ Resources:
                 "kms:CallerAccount": !Sub ${AWS::AccountId}
                 "kms:ViaService": !Sub "cloudformation.${AWS::Region}.amazonaws.com"
           
-          -
-            Sid: Allow use of the key by authorized Backup vault account
-            Effect: Allow
-            Principal:
-              AWS: 
-                - !Sub arn:aws:iam::${pMemberOneAccountId}:root
-                - !Sub arn:aws:iam::${pMemberTwoAccountId}:root
-            Action:
-              - kms:DescribeKey
-              - kms:Encrypt
-              - kms:Decrypt
-              - kms:ReEncrypt*
-              - kms:GenerateDataKey
-              - kms:GenerateDataKeyWithoutPlaintext
-            Resource: "*"
-
-          - 
-            Sid: "Allow attachment of persistent resources"
-            Effect: Allow
-            Principal:
-              AWS:
-                - !Sub arn:aws:iam::${pMemberOneAccountId}:root
-                - !Sub arn:aws:iam::${pMemberTwoAccountId}:root
-            Action:
-              - kms:CreateGrant
-              - kms:ListGrants
-              - kms:RevokeGrant
-            Resource: "*"
-            Condition:
-              Bool:
-                kms:GrantIsForAWSResource: true
       Tags:
         - Key: !Ref pTagKey1
           Value: !Ref pTagValue1

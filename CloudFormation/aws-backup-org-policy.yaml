@@ -1,52 +1,180 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: This template deploys Backup Policies required to manage backups at an organization level. It should be deployed to the management account.
+Description: This template deploys Backup Policies required to manage backups at an organization level.
 
 Parameters:
   pOrgbackupAccounts: 
-    Description: A CSV list of the AWS account id or AWS Organizations OU id to attach backup policies. 
+    Description: A CSV list of the AWS accounts or OUs to attach backup policies. 
     Type: CommaDelimitedList
     Default: ""  
-  pLambdaS3BucketName:
-    Description: The name of the S3 bucket hosting the custom Lambda code.
-    Type: String
-    Default: awsstorageblog
   pCrossAccountBackupRole:
     Description: This is the IAM role name for the cross-account backup role that carries out the backup activities.
+    Type: String   
+  pBackupScheduler1:
+    Description: The CRON or rate job to initiate backup jobs in sample backup policy 1. For example, cron(0 0/1 ? * * *).
     Type: String
-  pBackupScheduler:
-    Description: The CRON job to initiate backup jobs. For example, cron(0 0/1 ? * * *).
+    Default: "cron(0 0/1 ? * * *)"
+  pBackupScheduler2:
+    Description: The CRON or rate job to initiate backup jobs in sample backup policy 2. For example, cron(0 0/1 ? * * *).
     Type: String
-    Default: cron(0 0/1 ? * * *)
+    Default: "cron(0 0/1 ? * * *)"
   pMemberAccountBackupVault:
     AllowedPattern: ^[a-zA-Z0-9\-\_\.]{1,50}$
     ConstraintDescription: The name of the member account Backup vaults. (Name is case sensitive). 
     Type: String
+  pCentralBackupVaultArn:
+    Type: String
+    Description: This is the ARN of the centralized account backup vault.
   pBackupTagKey1:
     Type: String 
-    Description: The backup tag key to automatically assign resources to a backup plan across the member accounts. 
+    Description: The tag key 1 to automatically assign AWS Backup supported resources to a backup plan across the member accounts. 
     Default: 'project'
   pBackupTagValue1:
     Type: String 
-    Description: The backup tag value to automatically assign resources to a backup plan across the member accounts. 
+    Description: The tag value 1 to automatically assign AWS Backup supported resources to a backup plan across the member accounts.
     Default: 'aws-backup-demo'
   pBackupTagKey2:
     Type: String 
-    Description: The backup tag key to automatically assign resources to a backup plan across the member accounts. 
+    Description: The tag key 2 to automatically assign AWS Backup supported resources to a backup plan across the member accounts.
     Default: 'environment'
   pBackupTagValue2:
     Type: String 
-    Description: The backup tag value to automatically assign resources to a backup plan across the member accounts. 
+    Description: The tag value 2 to automatically assign AWS Backup supported resources to a backup plan across the member accounts.
     Default: 'aws-dev'
   pTagKey:
     Type: String 
-    Description: This is the tag key to assign to resources.
+    Description: This is the tag key to assign to resources created by CloudFormation.
     Default: 'project'
   pTagValue:
     Type: String 
-    Description: This is the tag value to assign to resources.
+    Description: This is the tag value to assign to resources created by CloudFormation.
     Default: 'aws-backup'
 
+  pStackBinaryURL:
+    Description: The URL for the StackBinary Zip File
+    Type: String    
+    Default: 'https://awsstorageblogresources.s3.us-west-2.amazonaws.com/ioawssecbackupblog/OrgPolicyCustomResourceManager.zip'
 Resources:
+  rLocalCacheBucket:
+    Type: "AWS::S3::Bucket"
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true      
+
+  CleanupLocalCacheBucketOnDelete:
+    Type: Custom::CleanupBucket
+    Properties:
+      ServiceToken: !GetAtt rGlobalCfnCodeReplicatorLambda.Arn
+      S3BucketToCleanup: !Ref rLocalCacheBucket  
+
+  CopySolutionToLocalCacheBucket:
+    Type: Custom::ReplicateSolutionBinaries
+    Properties:
+      ServiceToken: !GetAtt rGlobalCfnCodeReplicatorLambda.Arn
+      SolutionDestinationBucket: !Ref rLocalCacheBucket
+      SolutionURL: !Ref pStackBinaryURL
+
+  rGlobalCfnCodeReplicatorLambda:
+    Type: AWS::Lambda::Function
+    Metadata:
+        cfn_nag:
+          rules_to_suppress:
+            - id: W89
+              reason: "NA"
+            - id: W92
+              reason: "NA"    
+    Properties:
+      Code:
+        ZipFile: |-
+          #!/usr/bin/env python
+          # -*- coding: utf-8 -*-
+          import json
+          import boto3
+          import urllib3
+          import os
+          import shutil
+          from urllib.parse import urlparse
+          physical_resource_id = 'GlobalCfnCodeReplicator'  
+          def process_bucket_cleanup_request(bucket_name):
+              print(f"process_bucket_cleanup_request starting for bucket_name : {bucket_name}")
+              s3 = boto3.resource('s3')
+              bucket_to_delete = s3.Bucket(bucket_name)
+              response = bucket_to_delete.objects.all().delete()
+              print(f"process_bucket_cleanup_request all object delete done. Response : {response}")
+        
+          def download_url(url, save_path):
+            c = urllib3.PoolManager()
+            with c.request('GET',url, preload_content=False) as resp, open(save_path, 'wb') as out_file:
+                shutil.copyfileobj(resp, out_file)
+            resp.release_conn()
+            
+          def lambda_handler(event, context):
+            try:
+                print(f'Handling event : {event}')
+                request_type = event.get('RequestType')              
+                solution_url = event['ResourceProperties'].get('SolutionURL')
+                solution_bucket = event['ResourceProperties'].get('SolutionDestinationBucket')
+                response_data = {
+                    'RequestType': request_type,
+                    'SolutionURL' : solution_url,
+                    'SolutionDestinationBucket' : solution_bucket
+                }
+                if request_type == 'Create' or request_type == 'Update':
+                    if solution_url:
+                        print(f'downloading file from : {solution_url}')
+                        a = urlparse(solution_url)
+                        original_file_name = os.path.basename(a.path)
+                        temp_file_name = '/tmp/'+original_file_name
+                        download_url(solution_url,temp_file_name)
+                        file_size = (os.stat(temp_file_name).st_size / 1024)
+                        print(f'Downloaded report to File : {temp_file_name} , Size : {file_size}')
+                        s3_client = boto3.client('s3')
+                        print(f"uploading payload to : {solution_bucket} at {original_file_name}")
+                        extraArgsForUpload = {'ACL':'bucket-owner-full-control', 'Tagging':'Source=StackBinaryURL'}
+                        s3_client.upload_file(Filename=temp_file_name, Bucket=solution_bucket, Key=original_file_name,ExtraArgs=extraArgsForUpload)
+                elif request_type == 'Delete':
+                    solution_bucket = event['ResourceProperties'].get('S3BucketToCleanup')
+                    if solution_bucket:
+                        process_bucket_cleanup_request(solution_bucket)
+                send(event, context, 'SUCCESS', response_data, physical_resource_id)
+            except Exception as e:
+                send(event, context, 'FAILED', response_data, physical_resource_id)
+          def send(event, context, response_status, response_data, physical_resource_id, no_echo=False):
+            http = urllib3.PoolManager()
+            response_url = event['ResponseURL']
+            json_response_body = json.dumps({
+                'Status': response_status,
+                'Reason': f'See the details in CloudWatch Log Stream: {context.log_stream_name}',
+                'PhysicalResourceId': physical_resource_id,
+                'StackId': event['StackId'],
+                'RequestId': event['RequestId'],
+                'LogicalResourceId': event['LogicalResourceId'],
+                'NoEcho': no_echo,
+                'Data': response_data
+            }).encode('utf-8')
+            headers = {
+                'content-type': '',
+                'content-length': str(len(json_response_body))
+            }
+            try:
+                http.request('PUT', response_url,
+                             body=json_response_body, headers=headers)
+            except Exception as e:
+                print(e)
+      Description: Copy Solutions Binary to Local Cache Bucket
+      Handler: index.lambda_handler
+      Role : !GetAtt OrgPolicyCustomResourceManagerRole.Arn
+      Runtime: python3.7
+      Timeout: 300
+
   rOrgBackUpPolicy:
     Type: Custom::OrgPolicy
     Properties:
@@ -65,7 +193,7 @@ Resources:
                           "rules": {
                               "OrgDailyBackupRule": {
                                   "schedule_expression": {
-                                      "@@assign": "SCHEDULE_EXPRESSION"
+                                      "@@assign": "SCHEDULE_EXPRESSION_1"
                                   },
                                   "start_backup_window_minutes": {
                                       "@@assign": "480"
@@ -92,9 +220,9 @@ Resources:
                                       }
                                   },
                                   "copy_actions": {
-                                    "<REPLACE-WITH-CENTRAL-BACKUP-VAULT-ARN>": {
+                                    "CENTRAL_VAULT_ARN": {
                                       "target_backup_vault_arn": {
-                                        "@@assign": "<REPLACE-WITH-CENTRAL-BACKUP-VAULT-ARN>"
+                                        "@@assign": "CENTRAL_VAULT_ARN"
                                       },
                                       "lifecycle": {
                                         "move_to_cold_storage_after_days": {
@@ -146,7 +274,7 @@ Resources:
                           "rules": {
                               "OrgDailyBackupRule": {
                                   "schedule_expression": {
-                                      "@@assign": "SCHEDULE_EXPRESSION"
+                                      "@@assign": "SCHEDULE_EXPRESSION_2"
                                   },
                                   "start_backup_window_minutes": {
                                       "@@assign": "480"
@@ -173,13 +301,17 @@ Resources:
                                       }
                                   },
                                   "copy_actions": {
-                                    "<REPLACE-WITH-CENTRAL-BACKUP-VAULT-ARN>": {
+                                    "CENTRAL_VAULT_ARN": {
                                       "target_backup_vault_arn": {
-                                        "@@assign": "<REPLACE-WITH-CENTRAL-BACKUP-VAULT-ARN>"
+                                        "@@assign": "CENTRAL_VAULT_ARN"
                                       },
                                       "lifecycle": {
-                                        "move_to_cold_storage_after_days": {"@@assign": "30"},
-                                        "delete_after_days": {"@@assign": "365"} 
+                                        "move_to_cold_storage_after_days": {
+                                          "@@assign": "30"
+                                        },
+                                        "delete_after_days": {
+                                          "@@assign": "365"
+                                        }
                                       }
                                   }
                               }
@@ -225,20 +357,23 @@ Resources:
           - TAG_VALUE_2 : !Ref "pBackupTagValue2"
           - TAG_KEY : !Ref "pTagKey"
           - TAG_VALUE : !Ref "pTagValue"
-          - SCHEDULE_EXPRESSION : !Ref "pBackupScheduler"
+          - SCHEDULE_EXPRESSION_1 : !Ref "pBackupScheduler1"
+          - SCHEDULE_EXPRESSION_2 : !Ref "pBackupScheduler2"
+          - CENTRAL_VAULT_ARN : !Ref "pCentralBackupVaultArn"
       ServiceToken: !GetAtt OrgPolicyCustomResourceManager.Arn
       
   
   OrgPolicyCustomResourceManager:
     Type: AWS::Lambda::Function
+    DependsOn: CopySolutionToLocalCacheBucket
     Properties:
       FunctionName: OrgPolicyCustomResourceManager
       Description: Lambda function to deploy CloudFormation custom resources
                    to AWS Organizations.
       Handler: OrgPolicyCustomResourceManager.lambda_handler
       Code:
-        S3Bucket: !Ref pLambdaS3BucketName
-        S3Key: ioawssecbackupblog/OrgPolicyCustomResourceManager.zip
+        S3Bucket: !Ref rLocalCacheBucket
+        S3Key: OrgPolicyCustomResourceManager.zip
       Role: !GetAtt OrgPolicyCustomResourceManagerRole.Arn
       Runtime: python3.8
       MemorySize: 256
@@ -295,6 +430,6 @@ Resources:
           Statement:
           - Effect: Allow
             Action:
-              - s3:Get*
+              - s3:*
             Resource: 
-              !Sub arn:aws:s3:::${pLambdaS3BucketName}/*
+              !Sub arn:aws:s3:::${rLocalCacheBucket}/*
