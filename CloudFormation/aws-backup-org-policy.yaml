@@ -6,13 +6,6 @@ Parameters:
     Description: A CSV list of the AWS accounts or OUs to attach backup policies. 
     Type: CommaDelimitedList
     Default: ""  
-<<<<<<< HEAD
-=======
-  pLambdaS3BucketName:
-    Description: The name of the S3 bucket hosting the custom Lambda code.
-    Type: String
-    Default: awsstorageblogresources
->>>>>>> 7fc5629cfe99a42794a0255d9b2e384ec49e6128
   pCrossAccountBackupRole:
     Description: This is the IAM role name for the cross-account backup role that carries out the backup activities.
     Type: String   
