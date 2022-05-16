@@ -210,7 +210,7 @@ Resources:
                                       "@@assign": "VAULT_NAME"
                                   },
                                   "recovery_point_tags": {
-                                      "project": {
+                                      "TAG_KEY": {
                                           "tag_key": {
                                               "@@assign": "TAG_KEY"
                                           },
@@ -237,7 +237,7 @@ Resources:
                             }                            
                           },
                           "backup_plan_tags": {
-                              "project": {
+                              "TAG_KEY": {
                                   "tag_key": {
                                       "@@assign": "TAG_KEY"
                                   },
@@ -291,7 +291,7 @@ Resources:
                                       "@@assign": "VAULT_NAME"
                                   },
                                   "recovery_point_tags": {
-                                      "project": {
+                                      "TAG_KEY": {
                                           "tag_key": {
                                               "@@assign": "TAG_KEY"
                                           },
@@ -318,7 +318,7 @@ Resources:
                             }                            
                           },
                           "backup_plan_tags": {
-                              "project": {
+                              "TAG_KEY": {
                                   "tag_key": {
                                       "@@assign": "TAG_KEY"
                                   },
