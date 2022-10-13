@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: This template creates the central backup KMS Key and Vault required for the automated centralized backup at scale in AWS Organizations using AWS Backup.
-  It should be deployed in each member account.
+  It should be deployed to the central backup account.
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
