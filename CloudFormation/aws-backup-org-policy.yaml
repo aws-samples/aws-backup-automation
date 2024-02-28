@@ -172,7 +172,7 @@ Resources:
       Description: Copy Solutions Binary to Local Cache Bucket
       Handler: index.lambda_handler
       Role : !GetAtt OrgPolicyCustomResourceManagerRole.Arn
-      Runtime: python3.7
+      Runtime: python3.8
       Timeout: 300
 
   rOrgBackUpPolicy:
